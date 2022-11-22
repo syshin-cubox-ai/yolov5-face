@@ -358,7 +358,7 @@ class LoadFaceImagesAndLabels(Dataset):  # for training/testing
         if self.augment:
             # flip up-down
             if random.random() < hyp['flipud']:
-                img = np.flipud(img)
+                img = np.flipud(img).copy()
                 if nL:
                     labels[:, 2] = 1 - labels[:, 2]
 
@@ -368,9 +368,17 @@ class LoadFaceImagesAndLabels(Dataset):  # for training/testing
                     labels[:, 12] = np.where(labels[:, 12] < 0, -1, 1 - labels[:, 12])
                     labels[:, 14] = np.where(labels[:, 14] < 0, -1, 1 - labels[:, 14])
 
+                    temp = labels[:, 5:7].copy()
+                    labels[:, 5:7] = labels[:, 7:9].copy()
+                    labels[:, 7:9] = temp
+
+                    temp = labels[:, 11:13].copy()
+                    labels[:, 11:13] = labels[:, 13:15].copy()
+                    labels[:, 13:15] = temp
+
             # flip left-right
             if random.random() < hyp['fliplr']:
-                img = np.fliplr(img)
+                img = np.fliplr(img).copy()
                 if nL:
                     labels[:, 1] = 1 - labels[:, 1]
 
@@ -417,8 +425,9 @@ def showlabels(img, boxs, landmarks):
 
     for landmark in landmarks:
         #cv2.circle(img,(60,60),30,(0,0,255))
+        colors = ((255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255))
         for i in range(5):
-            cv2.circle(img, (int(landmark[2*i] * img.shape[1]), int(landmark[2*i+1]*img.shape[0])), 3 ,(0,0,255), -1)
+            cv2.circle(img, (int(landmark[2*i] * img.shape[1]), int(landmark[2*i+1]*img.shape[0])), 3, colors[i], -1)
     cv2.imshow('test', img)
     cv2.waitKey(0)
 
