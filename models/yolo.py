@@ -30,20 +30,18 @@ class Detect(nn.Module):
 
     def __init__(self, nc=80, anchors=(), ch=()):  # detection layer
         super(Detect, self).__init__()
-        self.nc = nc  # number of classes
+        self.nc = nc  # number of classes (클래스 개수=1)
         #self.no = nc + 5  # number of outputs per anchor
-        self.no = nc + 5 + 10  # number of outputs per anchor
-
-        self.nl = len(anchors)  # number of detection layers
-        self.na = len(anchors[0]) // 2  # number of anchors
+        self.no = nc + 5 + 10  # number of outputs per anchor (앵커당 출력 개수=16)
+        self.nl = len(anchors)  # number of detection layers (검출 계층 개수=3)
+        self.na = len(anchors[0]) // 2  # number of anchors (앵커 개수=3)
         self.grid = [torch.zeros(1)] * self.nl  # init grid
         a = torch.tensor(anchors).float().view(self.nl, -1, 2)
         self.register_buffer('anchors', a)  # shape(nl,na,2)
         self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
-        self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
+        self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv (검출 계층)
 
     def forward(self, x):
-        # x = x.copy()  # for profiling
         z = []  # inference output
         if self.export_cat:
             for i in range(self.nl):
@@ -111,18 +109,23 @@ class Detect(nn.Module):
 
     @staticmethod
     def _make_grid(nx=20, ny=20):
-        yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)])
+        if int(torch.__version__.split('.')[1]) >= 10:
+            yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)], indexing='ij')
+        else:
+            yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)])
         return torch.stack((xv, yv), 2).view((1, 1, ny, nx, 2)).float()
 
-    def _make_grid_new(self,nx=20, ny=20,i=0):
+    def _make_grid_new(self, nx=20, ny=20, i=0):
         d = self.anchors[i].device
-        if '1.10.0' in torch.__version__: # torch>=1.10.0 meshgrid workaround for torch>=0.7 compatibility
+        if int(torch.__version__.split('.')[1]) >= 10:
             yv, xv = torch.meshgrid([torch.arange(ny).to(d), torch.arange(nx).to(d)], indexing='ij')
         else:
             yv, xv = torch.meshgrid([torch.arange(ny).to(d), torch.arange(nx).to(d)])
         grid = torch.stack((xv, yv), 2).expand((1, self.na, ny, nx, 2)).float()
         anchor_grid = (self.anchors[i].clone() * self.stride[i]).view((1, self.na, 1, 1, 2)).expand((1, self.na, ny, nx, 2)).float()
         return grid, anchor_grid
+
+
 class Model(nn.Module):
     def __init__(self, cfg='yolov5s.yaml', ch=3, nc=None):  # model, input channels, number of classes
         super(Model, self).__init__()
@@ -222,7 +225,7 @@ class Model(nn.Module):
     #             print('%10.3g' % (m.w.detach().sigmoid() * 2))  # shortcut weights
 
     def fuse(self):  # fuse model Conv2d() + BatchNorm2d() layers
-        print('Fusing layers... ')
+        print('Fuse conv and bn layers.')
         for m in self.model.modules():
             if type(m) is Conv and hasattr(m, 'bn'):
                 m.conv = fuse_conv_and_bn(m.conv, m.bn)  # update conv
@@ -320,12 +323,11 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
     return nn.Sequential(*layers), sorted(save)
 
 
-from thop import profile
-from thop import clever_format
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='yolov5s.yaml', help='model.yaml')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--rect', action='store_true', help='rectangle inference')
     opt = parser.parse_args()
     opt.cfg = check_file(opt.cfg)  # check file
     set_logging()
@@ -333,13 +335,16 @@ if __name__ == '__main__':
     
     # Create model
     model = Model(opt.cfg).to(device)
-    stride = model.stride.max()
-    if stride == 32:
+    if opt.rect:
         input = torch.Tensor(1, 3, 480, 640).to(device)
     else:
-        input = torch.Tensor(1, 3, 512, 640).to(device)
+        input = torch.Tensor(1, 3, 640, 640).to(device)
     model.train()
-    print(model)
-    flops, params = profile(model, inputs=(input, ))
-    flops, params = clever_format([flops, params], "%.3f")
-    print('Flops:', flops, ',Params:' ,params)
+
+    import ptflops
+    macs, params = ptflops.get_model_complexity_info(model, tuple(input.shape[1:]), False, False)
+    print(f'ptflops GFLOPs: {macs * 2 / 1e9:.3f}, Params: {params / 1e6:.3f}M')
+
+    flops, params = thop.profile(model, inputs=(input,), verbose=False)
+    flops, params = thop.clever_format([flops, params], "%.3f")
+    print('paper Flops:', flops, ', Params:', params)
