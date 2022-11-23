@@ -71,7 +71,7 @@ if __name__ == '__main__':
     # Define output file path
     output_dir = 'onnx_files'
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, os.path.basename(opt.weights).replace('.py', '.onnx'))
+    output_path = os.path.join(output_dir, os.path.basename(opt.weights).replace('.pt', '.onnx'))
 
     # Define input and output names
     input_names = ['img']
