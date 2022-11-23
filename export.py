@@ -97,10 +97,10 @@ if __name__ == '__main__':
     onnx.shape_inference.infer_shapes_path(output_path, output_path, check_type=True, strict_mode=True, data_prop=True)
 
     # Compare output with torch model and ONNX model
+    torch_out = model(img).detach().numpy()
+    session = onnxruntime.InferenceSession(output_path, providers=['CPUExecutionProvider'])
+    onnx_out = session.run(None, {input_names[0]: img.numpy()})[0]
     try:
-        torch_out = model(img).numpy()
-        session = onnxruntime.InferenceSession(output_path, providers=['CPUExecutionProvider'])
-        onnx_out = session.run(None, {input_names[0]: img.numpy()})[0]
         np.testing.assert_allclose(torch_out, onnx_out, rtol=1e-3, atol=1e-5)
     except AssertionError as e:
         print(e)
