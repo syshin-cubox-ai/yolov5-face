@@ -80,7 +80,7 @@ if __name__ == '__main__':
     # Define dynamic_axes
     if opt.dynamic:
         dynamic_axes = {input_names[0]: {0: 'N', 2: 'H', 3: 'W'},
-                        output_names[0]: {0: 'N', 1: 'Candidates'}}
+                        output_names[0]: {0: 'N', 1: 'Candidates', 2: 'dyn_16'}}
     else:
         dynamic_axes = None
 
