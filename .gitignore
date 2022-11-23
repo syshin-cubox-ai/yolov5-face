@@ -1,6 +1,6 @@
 # Project ignores
 .idea/
-onnx/
+onnx_files/
 runs/
 wandb/
 widerface_evaluate/
