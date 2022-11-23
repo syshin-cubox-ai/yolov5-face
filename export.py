@@ -1,9 +1,3 @@
-"""Exports a YOLOv5 *.pt model to ONNX and TorchScript formats
-
-Usage:
-    $ export PYTHONPATH="$PWD" && python models/export.py --weights ./weights/yolov5s.pt --img 640 --batch 1
-"""
-
 import argparse
 import os
 
@@ -12,11 +6,8 @@ import onnx.shape_inference
 import onnxruntime.tools.symbolic_shape_infer
 import onnxsim
 import torch
-import torch.nn as nn
 
-import models.common
 from models.experimental import attempt_load
-from utils.activations import Hardswish, SiLU
 from utils.general import check_img_size
 
 if __name__ == '__main__':
@@ -49,24 +40,6 @@ if __name__ == '__main__':
     img = torch.zeros(opt.batch_size, 3, *opt.img_size)  # image size(1,3,320,192) iDetection
     if not opt.dynamic:
         print(f'input_shape: {tuple(img.shape)}')
-
-    # Update model
-    for k, m in model.named_modules():
-        m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatibility
-        if isinstance(m, models.common.Conv):  # assign export-friendly activations
-            if isinstance(m.act, nn.Hardswish):
-                m.act = Hardswish()
-            elif isinstance(m.act, nn.SiLU):
-                m.act = SiLU()
-        # elif isinstance(m, models.yolo.Detect):
-        #     m.forward = m.forward_export  # assign forward (optional)
-        if isinstance(m, models.common.ShuffleV2Block):  # shufflenet block nn.SiLU
-            for i in range(len(m.branch1)):
-                if isinstance(m.branch1[i], nn.SiLU):
-                    m.branch1[i] = SiLU()
-            for i in range(len(m.branch2)):
-                if isinstance(m.branch2[i], nn.SiLU):
-                    m.branch2[i] = SiLU()
 
     # Define output file path
     output_dir = 'onnx_files'
