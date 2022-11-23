@@ -40,7 +40,6 @@ if __name__ == '__main__':
     model.model[-1].anchor_grid = [torch.zeros(1)] * 3  # nl=3 number of detection layers
     model.model[-1].export_cat = True
     model.eval()
-    labels = model.names
 
     # Checks
     gs = int(max(model.stride))  # grid size (max stride)
@@ -48,6 +47,8 @@ if __name__ == '__main__':
 
     # Input
     img = torch.zeros(opt.batch_size, 3, *opt.img_size)  # image size(1,3,320,192) iDetection
+    if not opt.dynamic:
+        print(f'input_shape: {tuple(img.shape)}')
 
     # Update model
     for k, m in model.named_modules():
