@@ -80,7 +80,7 @@ if __name__ == '__main__':
     # Define dynamic_axes
     if opt.dynamic:
         dynamic_axes = {input_names[0]: {0: 'N', 2: 'H', 3: 'W'},
-                        output_names[0]: {0: 'N', 1: 'Candidates', 2: 'dyn_16'}}
+                        output_names[0]: {0: 'N', 1: 'Candidates'}}
     else:
         dynamic_axes = None
 
@@ -97,13 +97,13 @@ if __name__ == '__main__':
 
     # Check exported onnx model
     onnx_model = onnx.load(output_path)
-    onnx.checker.check_model(onnx_model)
+    onnx.checker.check_model(onnx_model, full_check=True)
     try:
         onnx_model = onnxruntime.tools.symbolic_shape_infer.SymbolicShapeInference.infer_shapes(onnx_model)
         onnx.save(onnx_model, output_path)
     except Exception as e:
         print(f'ERROR: {e}, skip symbolic shape inference.')
-    onnx.shape_inference.infer_shapes_path(output_path, output_path)
+    onnx.shape_inference.infer_shapes_path(output_path, output_path, check_type=True, strict_mode=True, data_prop=True)
 
     # Compare output with torch model and ONNX model
     try:
