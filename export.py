@@ -1,6 +1,8 @@
 import argparse
 import os
+from typing import Tuple
 
+import cv2
 import numpy as np
 import onnx.shape_inference
 import onnxruntime.tools.symbolic_shape_infer
@@ -10,48 +12,64 @@ import torch
 from models.experimental import attempt_load
 from utils.general import check_img_size
 
+
+def resize_preserving_aspect_ratio(img: np.ndarray, img_size: int, scale_ratio=1.0) -> Tuple[np.ndarray, float]:
+    # Resize preserving aspect ratio. scale_ratio is the scaling ratio of the img_size.
+    h, w = img.shape[:2]
+    scale = img_size // scale_ratio / max(h, w)
+    if scale != 1:
+        interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=interpolation)
+    return img, scale
+
+
+def transform_image(img: np.ndarray, img_size: int) -> torch.Tensor:
+    img, _ = resize_preserving_aspect_ratio(img, img_size)
+
+    pad = (0, img_size - img.shape[0], 0, img_size - img.shape[1])
+    img = cv2.copyMakeBorder(img, *pad, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+    img = torch.as_tensor(img, dtype=torch.float32)  # ndarray to Tensor, uint8 to fp16/32
+    img = img[:, :, [2, 1, 0]].permute((2, 0, 1)).contiguous()  # BGR to RGB, HWC to CHW
+    img /= 255  # 0~255 to 0~1
+    img.unsqueeze_(0)  # add batch dimension
+    return img
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='weights/yolov5s-face.pt', help='weights path')
-    parser.add_argument('--img_size', nargs='+', type=int, default=[640, 640], help='image size')  # height, width
-    parser.add_argument('--batch_size', type=int, default=1, help='batch size')
+    parser.add_argument('--img_size', type=int, default=640, help='image size')
     parser.add_argument('--dynamic', action='store_true', help='enable dynamic axis in onnx model')
     parser.add_argument('--skip_simplify', action='store_true', help='skip onnx-simplifier')
     # =======================TensorRT=================================
     parser.add_argument('--onnx2trt', action='store_true', help='export onnx to tensorrt')
     parser.add_argument('--fp16_trt', action='store_true', help='fp16 infer')
     # ================================================================
-    opt = parser.parse_args()
-    opt.img_size *= 2 if len(opt.img_size) == 1 else 1  # expand
-    print(opt)
+    args = parser.parse_args()
+    print(args)
 
-    # Load PyTorch model
-    model = attempt_load(opt.weights, map_location=torch.device('cpu'))  # load FP32 model
+    # Create torch model
+    model = attempt_load(args.weights, map_location=torch.device('cpu'))  # load FP32 model
     delattr(model.model[-1], 'anchor_grid')
     model.model[-1].anchor_grid = [torch.zeros(1)] * 3  # nl=3 number of detection layers
     model.model[-1].export_cat = True
     model.eval()
 
-    # Checks
-    gs = int(max(model.stride))  # grid size (max stride)
-    opt.img_size = [check_img_size(x, gs) for x in opt.img_size]  # verify img_size are gs-multiples
-
-    # Input
-    img = torch.zeros(opt.batch_size, 3, *opt.img_size)  # image size(1,3,320,192) iDetection
-    if not opt.dynamic:
-        print(f'input_shape: {tuple(img.shape)}')
+    # Create input data
+    img = cv2.imread('torch2trt/sample.jpg')
+    img = transform_image(img, check_img_size(args.img_size, model.stride.max()))
 
     # Define output file path
     output_dir = 'onnx_files'
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, os.path.basename(opt.weights).replace('.pt', '.onnx'))
+    output_path = os.path.join(output_dir, os.path.basename(args.weights).replace('.pt', '.onnx'))
 
     # Define input and output names
     input_names = ['img']
     output_names = ['pred']
 
     # Define dynamic_axes
-    if opt.dynamic:
+    if args.dynamic:
         dynamic_axes = {input_names[0]: {0: 'N', 2: 'H', 3: 'W'},
                         output_names[0]: {0: 'N', 1: 'Candidates', 2: 'dyn_16'}}
     else:
@@ -92,7 +110,7 @@ if __name__ == '__main__':
             exit(1)
 
     # Simplify ONNX model
-    if not opt.skip_simplify:
+    if not args.skip_simplify:
         model = onnx.load(output_path)
         input_shapes = {model.graph.input[0].name: img.shape}
         model, check = onnxsim.simplify(model, test_input_shapes=input_shapes)
@@ -101,8 +119,8 @@ if __name__ == '__main__':
     print(f'Successfully export ONNX model: {output_path}')
 
     # TensorRT export
-    if opt.onnx2trt:
+    if args.onnx2trt:
         from torch2trt.trt_model import ONNX_to_TRT
 
         print('\nStarting TensorRT export...')
-        ONNX_to_TRT(output_path, output_path.replace('.onnx', '.trt'), fp16_mode=opt.fp16_trt)
+        ONNX_to_TRT(output_path, output_path.replace('.onnx', '.trt'), fp16_mode=args.fp16_trt)
