@@ -340,6 +340,10 @@ class LoadFaceImagesAndLabels(Dataset):  # for training/testing
             # Augment colorspace
             augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
 
+            # Apply grayscale
+            if random.random() < hyp['grayscale']:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
             # Apply cutouts
             # if random.random() < 0.9:
             #     labels = cutout(img, labels)
