@@ -343,6 +343,8 @@ class LoadFaceImagesAndLabels(Dataset):  # for training/testing
             # Apply grayscale
             if random.random() < hyp['grayscale']:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                img = np.expand_dims(img, 2)
+                img = np.concatenate((img, img, img), 2)
 
             # Apply cutouts
             # if random.random() < 0.9:
