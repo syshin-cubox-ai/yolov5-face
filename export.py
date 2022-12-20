@@ -82,7 +82,7 @@ if __name__ == '__main__':
         output_path,
         input_names=input_names,
         output_names=output_names,
-        opset_version=17,
+        opset_version=12,
         dynamic_axes=dynamic_axes,
     )
 
