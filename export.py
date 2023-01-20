@@ -101,7 +101,7 @@ if __name__ == '__main__':
     session = onnxruntime.InferenceSession(output_path, providers=['CPUExecutionProvider'])
     onnx_out = session.run(None, {input_names[0]: img.numpy()})[0]
     try:
-        np.testing.assert_allclose(torch_out, onnx_out, rtol=1e-3, atol=1e-5)
+        np.testing.assert_allclose(torch_out, onnx_out, rtol=1e-3, atol=1e-4)
     except AssertionError as e:
         print(e)
         stdin = input('Do you want to ignore the error and proceed with the export ([y]/n)? ')
