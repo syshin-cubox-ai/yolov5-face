@@ -28,14 +28,14 @@ def convert(size, box):
     return x, y, w, h
 
 
-def wider2face(root, phase='val', ignore_small=0):
+def wider2face(root, ignore_small=0):
     data = {}
-    with open('{}/{}/label.txt'.format(root, phase), 'r') as f:
+    with open('{}/label.txt'.format(root), 'r') as f:
         lines = f.readlines()
         for line in tqdm(lines):
             line = line.strip()
             if '#' in line:
-                path = '{}/{}/images/{}'.format(root, phase, line.split()[-1])
+                path = '{}/images/{}'.format(root, line.split()[-1])
                 img = cv2.imread(path)
                 height, width, _ = img.shape
                 data[path] = list()
@@ -44,8 +44,9 @@ def wider2face(root, phase='val', ignore_small=0):
                 if box[2] < ignore_small or box[3] < ignore_small:
                     continue
                 box = convert((width, height), xywh2xxyy(box))
-                label = '0 {} {} {} {} -1 -1 -1 -1 -1 -1 -1 -1 -1 -1'.format(round(box[0], 4), round(box[1], 4),
-                                                                             round(box[2], 4), round(box[3], 4))
+                box = np.clip(box, 0, 1)
+                box = np.round(box, 6)
+                label = f'0 {box[0]} {box[1]} {box[2]} {box[3]} 0 0 0 0 0 0 0 0 0 0'
                 data[path].append(label)
     return data
 
@@ -61,7 +62,7 @@ if __name__ == '__main__':
         exit(1)
 
     root_path = sys.argv[1]
-    if not os.path.isfile(os.path.join(root_path, 'val', 'label.txt')):
+    if not os.path.isfile(os.path.join(root_path, 'label.txt')):
         print('Missing label.txt file.')
         exit(1)
 
@@ -75,11 +76,11 @@ if __name__ == '__main__':
     else:
         save_path = sys.argv[2]
 
-    datas = wider2face(root_path, phase='val')
+    datas = wider2face(root_path)
     for idx, data in enumerate(datas.keys()):
         pict_name = os.path.basename(data)
-        out_img = f'{save_path}/{idx}.jpg'
-        out_txt = f'{save_path}/{idx}.txt'
+        out_img = f'{save_path}/{str(idx).zfill(4)}.jpg'
+        out_txt = f'{save_path}/{str(idx).zfill(4)}.txt'
         shutil.copyfile(data, out_img)
         labels = datas[data]
         f = open(out_txt, 'w')
