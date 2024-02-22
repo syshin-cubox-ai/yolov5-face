@@ -1,9 +1,11 @@
 import os.path
 import sys
-import torch
-import torch.utils.data as data
+
 import cv2
 import numpy as np
+import torch
+import torch.utils.data as data
+import tqdm
 
 
 class WiderFaceDetection(data.Dataset):
@@ -54,12 +56,12 @@ class WiderFaceDetection(data.Dataset):
             annotation[0, 3] = label[1] + label[3]  # y2
 
             # landmarks
-            annotation[0, 4] = label[4]    # l0_x
-            annotation[0, 5] = label[5]    # l0_y
-            annotation[0, 6] = label[7]    # l1_x
-            annotation[0, 7] = label[8]    # l1_y
-            annotation[0, 8] = label[10]   # l2_x
-            annotation[0, 9] = label[11]   # l2_y
+            annotation[0, 4] = label[4]  # l0_x
+            annotation[0, 5] = label[5]  # l0_y
+            annotation[0, 6] = label[7]  # l1_x
+            annotation[0, 7] = label[8]  # l1_y
+            annotation[0, 8] = label[10]  # l2_x
+            annotation[0, 9] = label[11]  # l2_y
             annotation[0, 10] = label[13]  # l3_x
             annotation[0, 11] = label[14]  # l3_y
             annotation[0, 12] = label[16]  # l4_x
@@ -129,8 +131,7 @@ if __name__ == '__main__':
 
     aa = WiderFaceDetection(os.path.join(original_path, 'label.txt'))
 
-    for i in range(len(aa.imgs_path)):
-        print(i, aa.imgs_path[i])
+    for i in tqdm.tqdm(range(len(aa.imgs_path))):
         img = cv2.imread(aa.imgs_path[i])
         base_img = os.path.basename(aa.imgs_path[i])
         base_txt = os.path.basename(aa.imgs_path[i])[:-4] + ".txt"
@@ -153,10 +154,14 @@ if __name__ == '__main__':
                 annotation[0, 1] = (label[1] + label[3] / 2) / height  # cy
                 annotation[0, 2] = label[2] / width  # w
                 annotation[0, 3] = label[3] / height  # h
-                #if (label[2] -label[0]) < 8 or (label[3] - label[1]) < 8:
-                #    img[int(label[1]):int(label[3]), int(label[0]):int(label[2])] = 127
-                #    continue
-                # landmarks
+                # ignore negative value
+                if np.sum(np.where(np.array(label) < 0, 1, 0)):
+                    continue
+                # ignore small faces
+                if label[2] < 8 or label[3] < 8:
+                    img[int(label[1]):int(label[1] + label[3]), int(label[0]):int(label[0] + label[2])] = 127
+                    continue
+                # landmarkss
                 annotation[0, 4] = label[4] / width  # l0_x
                 annotation[0, 5] = label[5] / height  # l0_y
                 annotation[0, 6] = label[7] / width  # l1_x
